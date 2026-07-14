@@ -1,6 +1,13 @@
+require("dotenv").config();
 const express = require("express");
+const mongoose = require("mongoose");
+const Resource = require("./models/Resource");
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("Connected to MongoDB"))
+  .catch((err) => console.log(err));
 
 app.use(express.json());
 app.use((req, res, next) => {
@@ -11,76 +18,91 @@ app.use((req, res, next) => {
     next();
 });
 
-
-let resources = [
-  {
-    id: 1,
-    name: "Notebook",
-    category: "School"
-  },
-  {
-    id: 2,
-    name: "Laptop",
-    category: "Electronics"
-  }
-];
-let nextId = 3;
-
-app.get("/api/resources", (req, res) => {
-  res.json(resources);
-});
-
-app.get("/api/resources/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const resource = resources.find(item => item.id === id);
-
-  if (!resource) {
-    return res.status(404).json({
-      message: "Resource not found"
+app.get("/api/resources", async (req, res) => {
+  try {
+    const resources = await Resource.find();
+    res.json(resources);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
     });
   }
-  res.json(resource);
 });
 
-app.post("/api/resources", (req, res) => {
-  const newResource = {
-    id: nextId++,
-    ...req.body
-  };
-  resources.push(newResource);
-  res.status(201).json(newResource);
-});
-
-app.put("/api/resources/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const index = resources.findIndex(item => item.id === id);
-
-  if (index === -1) {
-    return res.status(404).json({
-      message: "Resource not found"
+app.get("/api/resources/:id", async (req, res) => {
+  try {
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({
+        message: "Resource not found"
+      });
+    }
+    res.json(resource);
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
     });
   }
-  resources[index] = {
-    id,
-    ...req.body
-  };
-  res.json(resources[index]);
 });
 
-app.delete("/api/resources/:id", (req, res) => {
-  const id = Number(req.params.id);
-  const index = resources.findIndex(item => item.id === id);
+app.post("/api/resources", async (req, res) => {
 
-  if (index === -1) {
-    return res.status(404).json({
-      message: "Resource not found"
+  if (!req.body.name || !req.body.category) {
+    return res.status(400).json({
+      message: "Please include both a name and category"
     });
   }
-  const deleted = resources.splice(index, 1);
-  res.json({
-    message: "Resource deleted",
-    resource: deleted[0]
-  });
+  try {
+    const resource = await Resource.create({
+      name: req.body.name,
+      category: req.body.category
+    });
+    res.status(201).json(resource);
+  } catch (err) {
+    res.status(400).json({
+      message: err.message
+    });
+  }
+
+});
+
+app.put("/api/resources/:id", async (req, res) => {
+  try {
+    const updated = await Resource.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {new: true, runValidators: true}
+    );
+    if (!updated) {
+      return res.status(404).json({
+        message: "Resource not found"
+      });
+    }
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({
+      message: err.message
+    });
+  }
+});
+
+app.delete("/api/resources/:id", async (req, res) => {
+  try {
+    const deleted = await Resource.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({
+        message: "Resource not found"
+      });
+    }
+    res.json({
+      message: "Resource deleted",
+      resource: deleted
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: err.message
+    });
+  }
 });
 
 app.listen(PORT, () => {
